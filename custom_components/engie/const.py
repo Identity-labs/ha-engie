@@ -1,0 +1,21 @@
+"""Constants for the ENGIE Particuliers integration."""
+
+from __future__ import annotations
+
+DOMAIN = "engie"
+MANUFACTURER = "ENGIE"
+ATTRIBUTION = "Data provided by ENGIE Particuliers"
+
+CONF_SESSION_STORE = "session"
+CONF_SCAN_INTERVAL = "scan_interval"
+
+DEFAULT_SCAN_INTERVAL = 6 * 60 * 60  # 6 hours — tariffs barely move
+TOKEN_REFRESH_SKEW = 120  # refresh JWT 2 minutes before expiry
+DEFAULT_EXPIRES_IN = 3600
+
+UNIT_EUR_KWH = "EUR/kWh"
+
+ENERGY_LABELS = {
+    "ELEC": "Electricity",
+    "GAZ": "Gas",
+}

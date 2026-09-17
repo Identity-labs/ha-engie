@@ -1,0 +1,17 @@
+{
+  "domain": "engie",
+  "name": "ENGIE Particuliers",
+  "codeowners": [
+    "@identity-labs"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/identity-labs/ha-engie",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/identity-labs/ha-engie/issues",
+  "requirements": [
+    "ha-engie-api>=0.1.0"
+  ],
+  "version": "0.1.0"
+}

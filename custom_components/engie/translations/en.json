@@ -1,0 +1,71 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ENGIE Particuliers",
+        "description": "Sign in with the same email and password as the ENGIE mobile app. After the first login, the session is stored and refreshed automatically.",
+        "data": {
+          "username": "Email",
+          "password": "Password"
+        }
+      },
+      "mfa_factor": {
+        "title": "Two-factor authentication",
+        "description": "Choose how you want to receive the verification code.",
+        "data": {
+          "mfa_factor": "Method"
+        }
+      },
+      "mfa_code": {
+        "title": "Verification code",
+        "description": "Enter the code sent to {destination}.",
+        "data": {
+          "mfa_code": "Code"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to reach ENGIE. Check your network.",
+      "invalid_auth": "Invalid email or password.",
+      "invalid_mfa": "Invalid or expired verification code.",
+      "mfa_required": "A verification code is required.",
+      "mfa_send_failed": "Could not send the verification code.",
+      "locked_out": "The account is locked. Unlock it in the ENGIE app and try again.",
+      "password_expired": "The password has expired. Change it in the ENGIE app.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This ENGIE account is already configured.",
+      "reauth_successful": "Re-authentication successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ENGIE Particuliers options",
+        "data": {
+          "scan_interval": "Price refresh interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "price_kwh_ttc": {
+        "name": "Price kWh TTC"
+      },
+      "price_kwh_ht": {
+        "name": "Price kWh HT"
+      },
+      "abonnement_ttc": {
+        "name": "Subscription TTC"
+      },
+      "cadran_price_kwh_ttc": {
+        "name": "{cadran} price kWh TTC"
+      },
+      "cadran_price_kwh_ht": {
+        "name": "{cadran} price kWh HT"
+      }
+    }
+  }
+}
