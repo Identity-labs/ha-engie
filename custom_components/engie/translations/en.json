@@ -67,10 +67,19 @@
                 "name": "{cadran} price kWh HT"
             },
             "last_day_kwh": {
-                "name": "Last day consumption"
+                "name": "Daily consumption"
             },
             "last_day_cost": {
-                "name": "Last day cost TTC"
+                "name": "Daily cost TTC"
+            },
+            "daily_consumption": {
+                "name": "Daily consumption"
+            },
+            "daily_cost": {
+                "name": "Daily cost TTC"
+            },
+            "energy": {
+                "name": "Energy"
             },
             "balance": {
                 "name": "Outstanding balance"

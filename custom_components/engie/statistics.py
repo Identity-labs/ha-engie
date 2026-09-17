@@ -210,6 +210,7 @@ async def async_import_history(
         )
         total += await _write_points(
             hass,
+            coordinator,
             contract_id,
             _contract_name(price),
             points,
@@ -235,6 +236,7 @@ async def async_heal_recent(
             recent = recent[-HISTORY_HEAL_DAYS:]
         total += await _write_points(
             hass,
+            coordinator,
             contract_id,
             _contract_name(price),
             recent,
@@ -246,6 +248,7 @@ async def async_heal_recent(
 
 async def _write_points(
     hass: Any,
+    coordinator: EngieCoordinator,
     contract_id: str,
     name: str,
     points: list[ConsumptionPoint],
@@ -273,6 +276,11 @@ async def _write_points(
         if not statistics:
             continue
         async_add_external_statistics(hass, _metadata(contract_id, stream, name), statistics)
+        last_sum = float(statistics[-1]["sum"])
+        if stream == STREAM_ENERGY:
+            coordinator.energy_totals[contract_id] = last_sum
+        else:
+            coordinator.cost_totals[contract_id] = last_sum
         written += len(statistics)
     return written
 
@@ -299,6 +307,8 @@ async def async_clear_history(
         stat_ids.append(statistic_id(contract_id, STREAM_ENERGY))
         if include_costs:
             stat_ids.append(statistic_id(contract_id, STREAM_COST))
+        coordinator.energy_totals.pop(contract_id, None)
+        coordinator.cost_totals.pop(contract_id, None)
     if not stat_ids:
         return []
     recorder = get_instance(hass)

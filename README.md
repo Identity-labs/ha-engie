@@ -16,8 +16,9 @@ One Home Assistant **device per energy contract**:
 | Price kWh HT | `EUR/kWh` | Optional |
 | Subscription TTC | `EUR` | Monthly standing charge |
 | `{cadran}` price kWh TTC / HT | `EUR/kWh` | BASE / HP / HC when ENGIE reports bands |
-| Last day consumption | `kWh` | Latest daily histo row |
-| Last day cost TTC | `EUR` | Billed energy cost for that day |
+| **Daily consumption** | `kWh` | Last billed day (Linky/Gazpar histo) |
+| Daily cost TTC | `EUR` | Energy cost for that day |
+| **Energy** | `kWh` | Cumulative daily histo — Energy dashboard grid consumption |
 
 One **account** device:
 
@@ -53,7 +54,7 @@ Home Assistant will install `ha-engie-api` automatically from `manifest.json` (`
 1. **Settings → Dashboards → Energy**
 2. Electricity grid: *Use an entity with the current price* → the **Price kWh TTC** sensor on the electricity contract
 3. Gas: same, on the gas contract — your gas energy sensor must be in **kWh** (Gazpar), not m³
-4. Optionally pick the imported `engie:…_energy` statistics as the consumption source if you do not already have a local meter
+4. Electricity / gas consumption: pick the **Energy** sensor on each contract (or the imported `engie:…_energy` statistic)
 
 The first poll backfills about 400 days of daily history. To redo it, call the `engie.import_history` service. `engie.clear_import_history` deletes those statistic streams.
 

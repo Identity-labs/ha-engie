@@ -67,10 +67,19 @@
                 "name": "Prix kWh HT {cadran}"
             },
             "last_day_kwh": {
-                "name": "Conso du dernier jour"
+                "name": "Conso quotidienne"
             },
             "last_day_cost": {
-                "name": "Coût TTC du dernier jour"
+                "name": "Coût TTC quotidien"
+            },
+            "daily_consumption": {
+                "name": "Conso quotidienne"
+            },
+            "daily_cost": {
+                "name": "Coût TTC quotidien"
+            },
+            "energy": {
+                "name": "Énergie"
             },
             "balance": {
                 "name": "Solde à payer"

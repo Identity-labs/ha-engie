@@ -36,6 +36,13 @@ class EngieCoordinator(DataUpdateCoordinator[AccountSnapshot]):
         self.api = api
         self.entry = entry
         self._history_bootstrapped = False
+        self.energy_totals: dict[str, float] = {}
+        self.cost_totals: dict[str, float] = {}
+
+    def energy_statistic_id(self, contract_id: str) -> str:
+        from .statistics import STREAM_ENERGY, statistic_id
+
+        return statistic_id(contract_id, STREAM_ENERGY)
 
     async def _async_update_data(self) -> AccountSnapshot:
         try:
@@ -57,6 +64,7 @@ class EngieCoordinator(DataUpdateCoordinator[AccountSnapshot]):
                 await stats.async_import_history(self.hass, self)
             else:
                 await stats.async_heal_recent(self.hass, self, snapshot)
+            self.async_set_updated_data(snapshot)
         except Exception:  # noqa: BLE001 — history import must not fail the poll
             if first:
                 self._history_bootstrapped = False
