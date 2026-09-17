@@ -63,9 +63,66 @@
       "cadran_price_kwh_ttc": {
         "name": "{cadran} price kWh TTC"
       },
-      "cadran_price_kwh_ht": {
-        "name": "{cadran} price kWh HT"
-      }
+            "cadran_price_kwh_ht": {
+                "name": "{cadran} price kWh HT"
+            },
+            "last_day_kwh": {
+                "name": "Last day consumption"
+            },
+            "last_day_cost": {
+                "name": "Last day cost TTC"
+            },
+            "balance": {
+                "name": "Outstanding balance"
+            },
+            "next_invoice": {
+                "name": "Next invoice"
+            },
+            "last_invoice": {
+                "name": "Last invoice TTC"
+            }
+        },
+        "binary_sensor": {
+            "authentication": {
+                "name": "Authenticated"
+            },
+            "energy_cut": {
+                "name": "Supply cut"
+            }
+        }
+    },
+    "services": {
+        "import_history": {
+            "name": "Import consumption history",
+            "description": "Import daily electricity and gas consumption into long-term statistics for the Energy dashboard.",
+            "fields": {
+                "energy": {
+                    "name": "Energy",
+                    "description": "Energies to import. Leave empty for every contract."
+                },
+                "days": {
+                    "name": "Days",
+                    "description": "How far back to fetch daily history."
+                },
+                "include_costs": {
+                    "name": "Include costs",
+                    "description": "Also import billed euro TTC as a cost statistic."
+                }
+            }
+        },
+        "clear_import_history": {
+            "name": "Clear imported history",
+            "description": "Delete ENGIE long-term statistics previously imported into the recorder.",
+            "fields": {
+                "energy": {
+                    "name": "Energy",
+                    "description": "Energies to clear. Leave empty for every contract."
+                },
+                "include_costs": {
+                    "name": "Include costs",
+                    "description": "Also delete imported cost statistics."
+                }
+            }
+        }
     }
-  }
 }

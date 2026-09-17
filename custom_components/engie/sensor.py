@@ -1,24 +1,26 @@
-"""Price sensors for the Energy dashboard."""
+"""Price, consumption, and billing sensors."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
+from engie_particuliers.models import AccountSnapshot, parse_engie_datetime
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CURRENCY_EURO
+from homeassistant.const import CURRENCY_EURO, EntityCategory, UnitOfEnergy
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import ATTRIBUTION, DOMAIN, UNIT_EUR_KWH
-from .coordinator import EngiePriceCoordinator
-from .entity import build_contract_device_info
+from .coordinator import EngieCoordinator
+from .entity import build_account_device_info, build_contract_device_info
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +34,7 @@ class SensorSpec:
     cadran: str | None = None
     icon: str | None = None
     state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT
+    source: str = "price"
 
 
 def _contract_specs() -> list[SensorSpec]:
@@ -63,6 +66,27 @@ def _contract_specs() -> list[SensorSpec]:
             display_precision=2,
             icon="mdi:cash",
             state_class=None,
+        ),
+        SensorSpec(
+            translation_key="last_day_kwh",
+            unique_suffix="last_day_kwh",
+            attr="kwh",
+            unit=UnitOfEnergy.KILO_WATT_HOUR,
+            device_class=None,
+            display_precision=1,
+            icon="mdi:flash",
+            source="last_day",
+        ),
+        SensorSpec(
+            translation_key="last_day_cost",
+            unique_suffix="last_day_cost",
+            attr="cost_ttc",
+            unit=CURRENCY_EURO,
+            device_class=SensorDeviceClass.MONETARY,
+            display_precision=2,
+            icon="mdi:cash",
+            state_class=None,
+            source="last_day",
         ),
     ]
 
@@ -105,17 +129,29 @@ def _iter_specs(price: Any) -> list[SensorSpec]:
     return specs
 
 
+def _snapshot(coordinator: EngieCoordinator) -> AccountSnapshot | None:
+    data = coordinator.data
+    return data if isinstance(data, AccountSnapshot) else None
+
+
+def _as_date(value: str | None) -> date | None:
+    parsed = parse_engie_datetime(value)
+    return parsed.date() if parsed else None
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: EngiePriceCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator: EngieCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     known: set[str] = set()
 
-    def _entities_for(prices: list[Any]) -> list[EngiePriceSensor]:
-        created: list[EngiePriceSensor] = []
-        for price in prices or []:
+    def _entities() -> list[SensorEntity]:
+        created: list[SensorEntity] = []
+        snapshot = _snapshot(coordinator)
+        for item in (snapshot.contracts if snapshot else []) or []:
+            price = item.price
             contract_id = str(getattr(price, "contract_id", "") or "")
             if not contract_id:
                 continue
@@ -124,27 +160,46 @@ async def async_setup_entry(
                 if unique_id in known:
                     continue
                 known.add(unique_id)
-                created.append(EngiePriceSensor(coordinator, entry, contract_id, spec))
+                created.append(EngieContractSensor(coordinator, entry, contract_id, spec))
+        for billing in (snapshot.billing if snapshot else []) or []:
+            unique_id = f"{entry.entry_id}_{billing.account_id}_balance"
+            if unique_id not in known:
+                known.add(unique_id)
+                created.append(
+                    EngieBalanceSensor(coordinator, entry, billing.account_id)
+                )
+            unique_id = f"{entry.entry_id}_{billing.account_id}_next_invoice"
+            if unique_id not in known:
+                known.add(unique_id)
+                created.append(
+                    EngieNextInvoiceSensor(coordinator, entry, billing.account_id)
+                )
+            unique_id = f"{entry.entry_id}_{billing.account_id}_last_invoice"
+            if unique_id not in known:
+                known.add(unique_id)
+                created.append(
+                    EngieLastInvoiceSensor(coordinator, entry, billing.account_id)
+                )
         return created
 
-    async_add_entities(_entities_for(coordinator.data or []))
+    async_add_entities(_entities())
 
     @callback
     def _on_update() -> None:
-        new_entities = _entities_for(coordinator.data or [])
+        new_entities = _entities()
         if new_entities:
             async_add_entities(new_entities)
 
     entry.async_on_unload(coordinator.async_add_listener(_on_update))
 
 
-class EngiePriceSensor(CoordinatorEntity[EngiePriceCoordinator], SensorEntity):
+class EngieContractSensor(CoordinatorEntity[EngieCoordinator], SensorEntity):
     _attr_has_entity_name = True
     _attr_attribution = ATTRIBUTION
 
     def __init__(
         self,
-        coordinator: EngiePriceCoordinator,
+        coordinator: EngieCoordinator,
         entry: ConfigEntry,
         contract_id: str,
         spec: SensorSpec,
@@ -180,6 +235,11 @@ class EngiePriceSensor(CoordinatorEntity[EngiePriceCoordinator], SensorEntity):
 
     @property
     def native_value(self) -> float | None:
+        if self._spec.source == "last_day":
+            last_day = self._current_last_day()
+            if last_day is None:
+                return None
+            return getattr(last_day, self._spec.attr, None)
         price = self._current_price()
         if price is None:
             return None
@@ -204,6 +264,11 @@ class EngiePriceSensor(CoordinatorEntity[EngiePriceCoordinator], SensorEntity):
             "source": getattr(price, "source", None),
             "notes": getattr(price, "notes", None),
         }
+        if self._spec.source == "last_day":
+            last_day = self._current_last_day()
+            if last_day is not None:
+                attrs["as_of"] = last_day.end or last_day.start
+                attrs["source"] = f"histo{price.energy.title()}Jours"
         if self._spec.cadran:
             cadran = self._current_cadran(price)
             attrs["cadran"] = self._spec.cadran
@@ -212,11 +277,22 @@ class EngiePriceSensor(CoordinatorEntity[EngiePriceCoordinator], SensorEntity):
                 attrs["source"] = getattr(cadran, "source", None) or attrs["source"]
         return {key: value for key, value in attrs.items() if value not in (None, "")}
 
-    def _current_price(self) -> Any | None:
-        for item in self.coordinator.data or []:
-            if str(getattr(item, "contract_id", "") or "") == self._contract_id:
+    def _current_item(self) -> Any | None:
+        snapshot = _snapshot(self.coordinator)
+        if snapshot is None:
+            return None
+        for item in snapshot.contracts:
+            if str(getattr(item.price, "contract_id", "") or "") == self._contract_id:
                 return item
         return None
+
+    def _current_price(self) -> Any | None:
+        item = self._current_item()
+        return None if item is None else item.price
+
+    def _current_last_day(self) -> Any | None:
+        item = self._current_item()
+        return None if item is None else item.last_day
 
     def _current_cadran(self, price: Any) -> Any | None:
         wanted = (self._spec.cadran or "").upper()
@@ -224,3 +300,134 @@ class EngiePriceSensor(CoordinatorEntity[EngiePriceCoordinator], SensorEntity):
             if str(getattr(cadran, "cadran", "") or "").upper() == wanted:
                 return cadran
         return None
+
+
+class _EngieBillingSensor(CoordinatorEntity[EngieCoordinator], SensorEntity):
+    _attr_has_entity_name = True
+    _attr_attribution = ATTRIBUTION
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: EngieCoordinator,
+        entry: ConfigEntry,
+        account_id: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._account_id = account_id
+        self._attr_device_info = build_account_device_info(entry)
+
+    def _billing(self) -> Any | None:
+        snapshot = _snapshot(self.coordinator)
+        if snapshot is None:
+            return None
+        for item in snapshot.billing:
+            if item.account_id == self._account_id:
+                return item
+        return None
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._billing() is not None
+
+
+class EngieBalanceSensor(_EngieBillingSensor):
+    _attr_translation_key = "balance"
+    _attr_native_unit_of_measurement = CURRENCY_EURO
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:scale-balance"
+
+    def __init__(
+        self,
+        coordinator: EngieCoordinator,
+        entry: ConfigEntry,
+        account_id: str,
+    ) -> None:
+        super().__init__(coordinator, entry, account_id)
+        self._attr_unique_id = f"{entry.entry_id}_{account_id}_balance"
+
+    @property
+    def native_value(self) -> float | None:
+        billing = self._billing()
+        if billing is None:
+            return None
+        return billing.balance.solde
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        billing = self._billing()
+        if billing is None:
+            return {}
+        return {
+            key: value
+            for key, value in {
+                "solde_hors_ce": billing.balance.solde_hors_ce,
+                "invoice_count": billing.invoice_count,
+            }.items()
+            if value not in (None, "")
+        }
+
+
+class EngieNextInvoiceSensor(_EngieBillingSensor):
+    _attr_translation_key = "next_invoice"
+    _attr_device_class = SensorDeviceClass.DATE
+    _attr_icon = "mdi:calendar-clock"
+
+    def __init__(
+        self,
+        coordinator: EngieCoordinator,
+        entry: ConfigEntry,
+        account_id: str,
+    ) -> None:
+        super().__init__(coordinator, entry, account_id)
+        self._attr_unique_id = f"{entry.entry_id}_{account_id}_next_invoice"
+
+    @property
+    def native_value(self) -> date | None:
+        billing = self._billing()
+        if billing is None:
+            return None
+        return _as_date(billing.balance.next_invoice_date)
+
+
+class EngieLastInvoiceSensor(_EngieBillingSensor):
+    _attr_translation_key = "last_invoice"
+    _attr_native_unit_of_measurement = CURRENCY_EURO
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:receipt-text"
+
+    def __init__(
+        self,
+        coordinator: EngieCoordinator,
+        entry: ConfigEntry,
+        account_id: str,
+    ) -> None:
+        super().__init__(coordinator, entry, account_id)
+        self._attr_unique_id = f"{entry.entry_id}_{account_id}_last_invoice"
+
+    @property
+    def native_value(self) -> float | None:
+        billing = self._billing()
+        if billing is None or billing.last_invoice is None:
+            return None
+        return billing.last_invoice.amount_ttc
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        billing = self._billing()
+        invoice = None if billing is None else billing.last_invoice
+        if invoice is None:
+            return {}
+        return {
+            key: value
+            for key, value in {
+                "date": invoice.date,
+                "due_date": invoice.due_date,
+                "label": invoice.label,
+                "payment_status": invoice.payment_status,
+            }.items()
+            if value not in (None, "")
+        }

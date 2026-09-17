@@ -1,0 +1,48 @@
+import_history:
+  name: Import consumption history
+  description: Import daily electricity and gas consumption into Home Assistant long-term statistics for the Energy dashboard.
+  fields:
+    energy:
+      name: Energy
+      description: Energies to import. Leave empty for every contract.
+      example: electricity
+      selector:
+        select:
+          multiple: true
+          options:
+            - electricity
+            - gas
+    days:
+      name: Days
+      description: How far back to fetch daily history (1–800). Default 400.
+      selector:
+        number:
+          min: 1
+          max: 800
+          mode: box
+    include_costs:
+      name: Include costs
+      description: Also import billed € TTC as a cost statistic.
+      default: true
+      selector:
+        boolean:
+
+clear_import_history:
+  name: Clear imported history
+  description: Delete ENGIE long-term statistics previously imported into the recorder.
+  fields:
+    energy:
+      name: Energy
+      description: Energies to clear. Leave empty for every contract.
+      selector:
+        select:
+          multiple: true
+          options:
+            - electricity
+            - gas
+    include_costs:
+      name: Include costs
+      description: Also delete imported cost statistics.
+      default: true
+      selector:
+        boolean:

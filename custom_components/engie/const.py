@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from homeassistant.const import Platform
+
 DOMAIN = "engie"
 MANUFACTURER = "ENGIE"
 ATTRIBUTION = "Data provided by ENGIE Particuliers"
+
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
 CONF_SESSION_STORE = "session"
 CONF_SCAN_INTERVAL = "scan_interval"
@@ -19,3 +23,14 @@ ENERGY_LABELS = {
     "ELEC": "Electricity",
     "GAZ": "Gas",
 }
+
+HISTORY_HEAL_DAYS = 14
+HISTORY_BACKFILL_DAYS = 400
+HISTORY_MAX_DAYS = 800
+CLEAR_STATISTICS_TIMEOUT_SECONDS = 30
+
+SERVICE_IMPORT_HISTORY = "import_history"
+SERVICE_CLEAR_HISTORY = "clear_import_history"
+
+STREAM_ENERGY = "energy"
+STREAM_COST = "cost"

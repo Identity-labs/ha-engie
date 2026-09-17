@@ -18,7 +18,7 @@ from engie_particuliers.exceptions import (
     AuthenticationError,
     MfaRequiredError,
 )
-from engie_particuliers.models import SessionInfo
+from engie_particuliers.models import AccountSnapshot, ConsumptionPoint, SessionInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
@@ -111,14 +111,48 @@ class EngieAPI:
         if self._needs_refresh():
             await self._async_refresh()
 
+    @property
+    def authenticated(self) -> bool:
+        return bool(self._session_dict().get("access_token"))
+
     async def async_get_prices(self) -> list[Any]:
+        snapshot = await self.async_get_snapshot()
+        return [item.price for item in snapshot.contracts]
+
+    async def async_get_snapshot(self) -> AccountSnapshot:
         await self.async_ensure_session()
         try:
-            return await self._run(self._client.get_prices)
+            return await self._run(self._client.get_snapshot)
         except ApiError as err:
             if getattr(err, "status_code", 0) in {401, 403}:
                 await self._async_refresh()
-                return await self._run(self._client.get_prices)
+                return await self._run(self._client.get_snapshot)
+            raise
+
+    async def async_get_consumption_points(
+        self,
+        contract_id: str,
+        *,
+        granularity: str = "day",
+        days: int = 400,
+    ) -> list[ConsumptionPoint]:
+        await self.async_ensure_session()
+        try:
+            return await self._run(
+                self._client.get_consumption_points_for_contract,
+                contract_id,
+                granularity=granularity,
+                days=days,
+            )
+        except ApiError as err:
+            if getattr(err, "status_code", 0) in {401, 403}:
+                await self._async_refresh()
+                return await self._run(
+                    self._client.get_consumption_points_for_contract,
+                    contract_id,
+                    granularity=granularity,
+                    days=days,
+                )
             raise
 
     async def async_close(self) -> None:
