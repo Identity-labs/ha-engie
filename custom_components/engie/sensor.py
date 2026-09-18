@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
-from engie_particuliers.models import AccountSnapshot, parse_engie_datetime
+from engie_particuliers.models import PARIS, AccountSnapshot, parse_engie_datetime
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -90,6 +90,17 @@ def _contract_specs() -> list[SensorSpec]:
             source="last_day",
         ),
         SensorSpec(
+            translation_key="today_consumption",
+            unique_suffix="today_kwh",
+            attr="kwh",
+            unit=UnitOfEnergy.KILO_WATT_HOUR,
+            device_class=SensorDeviceClass.ENERGY,
+            display_precision=1,
+            icon="mdi:calendar-today",
+            state_class=SensorStateClass.TOTAL,
+            source="today",
+        ),
+        SensorSpec(
             translation_key="energy",
             unique_suffix="energy",
             attr="energy_total",
@@ -149,6 +160,36 @@ def _snapshot(coordinator: EngieCoordinator) -> AccountSnapshot | None:
 def _as_date(value: str | None) -> date | None:
     parsed = parse_engie_datetime(value)
     return parsed.date() if parsed else None
+
+
+def _lag_days(point: Any) -> int | None:
+    parsed = parse_engie_datetime(getattr(point, "start", None))
+    if parsed is None:
+        return None
+    return (datetime.now(PARIS).date() - parsed.astimezone(PARIS).date()).days
+
+
+def _history_rows(item: Any) -> list[dict[str, Any]]:
+    if item is None:
+        return []
+    rows: list[dict[str, Any]] = []
+    for point in getattr(item, "recent_days", None) or []:
+        if getattr(point, "kwh", None) is None or getattr(point, "partial", False):
+            continue
+        parsed = parse_engie_datetime(point.start)
+        day = (
+            parsed.astimezone(PARIS).date().isoformat()
+            if parsed is not None
+            else str(point.start or "")[:10]
+        )
+        rows.append(
+            {
+                "date": day,
+                "kwh": point.kwh,
+                "cost_ttc": point.cost_ttc,
+            }
+        )
+    return rows
 
 
 async def async_setup_entry(
@@ -243,16 +284,26 @@ class EngieContractSensor(CoordinatorEntity[EngieCoordinator], SensorEntity):
 
     @property
     def available(self) -> bool:
-        return super().available and self._current_price() is not None
+        if not super().available or self._current_price() is None:
+            return False
+        if self._spec.source == "today":
+            return self._current_today() is not None
+        return True
 
     @property
     def last_reset(self):
-        if self._spec.source != "last_day" or self._spec.state_class != SensorStateClass.TOTAL:
+        if self._spec.state_class != SensorStateClass.TOTAL:
             return None
-        last_day = self._current_last_day()
-        if last_day is None:
+        point = (
+            self._current_today()
+            if self._spec.source == "today"
+            else self._current_last_day()
+            if self._spec.source == "last_day"
+            else None
+        )
+        if point is None:
             return None
-        return parse_engie_datetime(last_day.start or last_day.end)
+        return parse_engie_datetime(point.start or point.end)
 
     @property
     def native_value(self) -> float | None:
@@ -261,6 +312,11 @@ class EngieContractSensor(CoordinatorEntity[EngieCoordinator], SensorEntity):
             if last_day is None:
                 return None
             return getattr(last_day, self._spec.attr, None)
+        if self._spec.source == "today":
+            today = self._current_today()
+            if today is None:
+                return None
+            return getattr(today, self._spec.attr, None)
         if self._spec.source == "energy_total":
             return self._current_energy_total()
         price = self._current_price()
@@ -293,10 +349,24 @@ class EngieContractSensor(CoordinatorEntity[EngieCoordinator], SensorEntity):
                 attrs["as_of"] = last_day.end or last_day.start
                 attrs["period_start"] = last_day.start
                 attrs["period_end"] = last_day.end
+                attrs["lag_days"] = _lag_days(last_day)
+                attrs["complete"] = True
                 attrs["source"] = f"histo{price.energy.title()}Jours"
+        if self._spec.source == "today":
+            today = self._current_today()
+            if today is not None:
+                attrs["as_of"] = today.end or today.start
+                attrs["period_start"] = today.start
+                attrs["period_end"] = today.end
+                attrs["complete"] = False
+                attrs["source"] = "histoElecHeures"
         if self._spec.source == "energy_total":
             attrs["statistic_id"] = self.coordinator.energy_statistic_id(self._contract_id)
             attrs["source"] = "histoElecJours" if price.energy == "ELEC" else "histoGazJours"
+        if self._spec.source in {"last_day", "energy_total"}:
+            history = _history_rows(self._current_item())
+            if history:
+                attrs["history"] = history
         if self._spec.cadran:
             cadran = self._current_cadran(price)
             attrs["cadran"] = self._spec.cadran
@@ -321,6 +391,10 @@ class EngieContractSensor(CoordinatorEntity[EngieCoordinator], SensorEntity):
     def _current_last_day(self) -> Any | None:
         item = self._current_item()
         return None if item is None else item.last_day
+
+    def _current_today(self) -> Any | None:
+        item = self._current_item()
+        return None if item is None else getattr(item, "today", None)
 
     def _current_energy_total(self) -> float | None:
         stored = self.coordinator.energy_totals.get(self._contract_id)

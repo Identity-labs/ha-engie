@@ -78,6 +78,9 @@
             "daily_cost": {
                 "name": "Daily cost TTC"
             },
+            "today_consumption": {
+                "name": "Today consumption"
+            },
             "energy": {
                 "name": "Energy"
             },

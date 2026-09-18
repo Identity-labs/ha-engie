@@ -25,7 +25,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.storage import Store
 
-from .const import DEFAULT_EXPIRES_IN, DOMAIN, TOKEN_REFRESH_SKEW
+from .const import DEFAULT_EXPIRES_IN, DOMAIN, HISTORY_CHART_DAYS, TOKEN_REFRESH_SKEW
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,11 +122,13 @@ class EngieAPI:
     async def async_get_snapshot(self) -> AccountSnapshot:
         await self.async_ensure_session()
         try:
-            return await self._run(self._client.get_snapshot)
+            return await self._run(self._client.get_snapshot, daily_days=HISTORY_CHART_DAYS)
         except ApiError as err:
             if getattr(err, "status_code", 0) in {401, 403}:
                 await self._async_refresh()
-                return await self._run(self._client.get_snapshot)
+                return await self._run(
+                    self._client.get_snapshot, daily_days=HISTORY_CHART_DAYS
+                )
             raise
 
     async def async_get_consumption_points(

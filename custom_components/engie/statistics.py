@@ -91,7 +91,7 @@ def _usable_points(points: list[ConsumptionPoint]) -> list[tuple[datetime, Consu
     rows: list[tuple[datetime, ConsumptionPoint]] = []
     seen: set[datetime] = set()
     for point in points:
-        if point.kwh is None:
+        if point.kwh is None or getattr(point, "partial", False):
             continue
         start = _point_start(point)
         if start is None or start in seen:

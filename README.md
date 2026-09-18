@@ -16,8 +16,9 @@ One Home Assistant **device per energy contract**:
 | Price kWh HT | `EUR/kWh` | Optional |
 | Subscription TTC | `EUR` | Monthly standing charge |
 | `{cadran}` price kWh TTC / HT | `EUR/kWh` | BASE / HP / HC when ENGIE reports bands |
-| **Daily consumption** | `kWh` | Last billed day (Linky/Gazpar histo) |
+| **Daily consumption** | `kWh` | Last **complete** billed day (Linky D+1) |
 | Daily cost TTC | `EUR` | Energy cost for that day |
+| Today consumption | `kWh` | Partial current day if hourly slots exist (often unknown) |
 | **Energy** | `kWh` | Cumulative daily histo — Energy dashboard grid consumption |
 
 One **account** device:
@@ -31,6 +32,40 @@ One **account** device:
 | Supply cut | Diagnostic, disabled by default |
 
 Daily consumption is also written to **long-term statistics** (`engie:<contract>_energy` and `_cost`) so you can add it under Energy → Gas / Electricity grid consumption.
+
+Missing *today* does not make that history useless: the Energy dashboard and weekly/monthly charts are built from **complete** days (yesterday and older). That is the same lag as the ENGIE app.
+
+## Charts
+
+**Energy dashboard** (best): Settings → Dashboards → Energy → add grid/gas consumption from the **Energy** sensor. The first poll backfills ~400 complete days. Today stays empty until tomorrow.
+
+**Statistics graph** (built-in Lovelace), daily kWh bars from that cumulative series:
+
+```yaml
+type: statistics-graph
+chart_type: bar
+period: day
+stat_types:
+  - change
+entities:
+  - sensor.YOUR_CONTRACT_energy
+```
+
+**ApexCharts** from the last 31 complete days on the Daily consumption sensor (`attributes.history`):
+
+```yaml
+type: custom:apexcharts-card
+graph_span: 31d
+header:
+  title: Electricity
+series:
+  - entity: sensor.YOUR_CONTRACT_last_day_kwh
+    type: column
+    data_generator: |
+      return (entity.attributes.history || []).map((row) => {
+        return [new Date(`${row.date}T00:00:00`).getTime(), row.kwh];
+      });
+```
 
 ## Session: login once
 
@@ -47,7 +82,7 @@ Password is kept on the config entry only as a fallback when the refresh token d
 
 Copy `custom_components/engie` into your Home Assistant `custom_components` folder, restart, then **Settings → Devices & services → Add integration → ENGIE Particuliers**.
 
-Home Assistant will install `ha-engie-api` automatically from `manifest.json` (`>=0.2.0`).
+Home Assistant will install `ha-engie-api` automatically from `manifest.json` (`>=0.2.1`).
 
 ## Energy dashboard
 
@@ -69,5 +104,5 @@ In the integration options you can change the poll interval (seconds, 5 minutes 
 - Unofficial API — ENGIE may change it
 - Per-cadran HP/HC rates are not always available on every contract
 - Gas €/kWh is variable and excludes the standing charge
-- History import uses daily `histo*Jours` rows, not Linky half-hours
+- History import uses complete daily `histo*Jours` rows (Linky D+1). Same-day consumption is not published.
 - Use at your own risk; respect ENGIE terms of service
